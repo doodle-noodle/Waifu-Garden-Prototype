@@ -1,0 +1,47 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8781dbb25a613f944976781fb59d0054, type: 3}
+  m_Name: SoundLibrary
+  m_EditorClassIdentifier: Assembly-CSharp::SoundLibrary
+  Sounds:
+  - SoundID: dialogue_advance
+    Clip: {fileID: 0}
+  - SoundID: dialogue_choice
+    Clip: {fileID: 0}
+  - SoundID: event_end
+    Clip: {fileID: 0}
+  - SoundID: event_start
+    Clip: {fileID: 0}
+  - SoundID: evolution
+    Clip: {fileID: 0}
+  - SoundID: farmplot_placed
+    Clip: {fileID: 0}
+  - SoundID: fertilizer
+    Clip: {fileID: 0}
+  - SoundID: harvest
+    Clip: {fileID: 0}
+  - SoundID: item_bought
+    Clip: {fileID: 0}
+  - SoundID: item_sold
+    Clip: {fileID: 0}
+  - SoundID: seed_planted
+    Clip: {fileID: 0}
+  - SoundID: shovel
+    Clip: {fileID: 0}
+  - SoundID: stage_transition
+    Clip: {fileID: 0}
+  - SoundID: ui_close
+    Clip: {fileID: 0}
+  - SoundID: ui_open
+    Clip: {fileID: 0}
+  - SoundID: watering_can
+    Clip: {fileID: 0}
