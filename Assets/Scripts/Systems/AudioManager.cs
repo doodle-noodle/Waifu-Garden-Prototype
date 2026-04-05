@@ -26,7 +26,6 @@ public class AudioManager : MonoBehaviour
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
-        DontDestroyOnLoad(gameObject);
 
         var sources = GetComponents<AudioSource>();
         _sfxSource   = sources.Length >= 1 ? sources[0] : gameObject.AddComponent<AudioSource>();

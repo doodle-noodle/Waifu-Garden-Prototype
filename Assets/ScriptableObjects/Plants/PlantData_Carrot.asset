@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d9446d88457f24c439a9658e483e0f53, type: 3}
+  m_Name: PlantData_Carrot
+  m_EditorClassIdentifier: Assembly-CSharp::PlantData
+  PlantID: Carrot
+  PlantName: Carrot
+  SeedSprite: {fileID: 0}
+  SproutSprite: {fileID: 0}
+  MatureSprite: {fileID: 0}
+  SeedToSproutTime: 2.5
+  SproutToMatureTime: 2.5
+  BaseHarvestValue: 10
+  ShopUnlockHint: 
+  TutorialPlantMode: 0
+  Evolutions: []
