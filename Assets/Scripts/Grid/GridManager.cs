@@ -1,20 +1,12 @@
 // =============================================================================
 // GridManager.cs  |  Scripts/Grid
-// WaifuGarden — Phase 1 Update 4  (fresh start)
-//
-// APPROACH CHANGE: GridManager no longer spawns slot prefabs at runtime.
-// Instead, you build the grid visually in the Editor (drag SlotPrefab children
-// into GridContainer), save it as GridPrefab, and GridManager simply reads the
-// SlotController components that already exist in the scene.
-//
-// Benefits:
-//   - You can see and adjust the grid in Edit mode with no code changes
-//   - No Canvas layout timing issues
-//   - GridContainer is a normal prefab you can modify freely
-//
-// Setup: see Unity instructions below the script.
+// WaifuGarden — Pre-Phase 2 Fixes
+// Added: OnPlantPlanted event fired whenever a seed is successfully planted.
+// ModifierSystem (Phase 4) and EvolutionSystem (Phase 6) subscribe to this
+// so they are notified of new PlantInstances without polling.
 // =============================================================================
 
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -23,16 +15,30 @@ public class GridManager : MonoBehaviour
 {
     public static GridManager Instance { get; private set; }
 
-    // -------------------------------------------------------------------------
     [Header("Grid Container")]
-    [Tooltip("The RectTransform that contains all 16 (or N) SlotController children. " +
-             "These are pre-built in the Editor — not spawned at runtime.")]
+    [Tooltip("RectTransform containing all pre-built SlotController children.")]
     public RectTransform GridContainer;
 
     [Header("Starting Farm Plots")]
-    [Tooltip("Slot indices (0-based, left-to-right top-to-bottom) that begin with a farm plot. " +
-             "Default: 5,6,9,10 = centre 2×2 of a 4×4 grid.")]
     public List<int> StartingFarmPlotIndices = new List<int> { 5, 6, 9, 10 };
+
+    // -------------------------------------------------------------------------
+    // Events
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Fired whenever a seed is successfully planted in a slot.
+    /// Passes the SlotController that now contains the new PlantInstance.
+    /// Subscribers: ModifierSystem (Phase 4), EvolutionSystem (Phase 6),
+    ///              PlantLifecycleSystem (Phase 2).
+    /// </summary>
+    public event Action<SlotController> OnPlantPlanted;
+
+    /// <summary>
+    /// Fired whenever a plant is removed from a slot (harvest, shovel, evolution).
+    /// Passes the SlotController that was cleared.
+    /// </summary>
+    public event Action<SlotController> OnPlantRemoved;
 
     // -------------------------------------------------------------------------
     private SlotController[] _slots;
@@ -53,30 +59,14 @@ public class GridManager : MonoBehaviour
 
     // -------------------------------------------------------------------------
 
-    /// <summary>
-    /// Reads all SlotController components that are already children of GridContainer.
-    /// Order matches the Hierarchy order (top to bottom = slot 0, 1, 2 ...).
-    /// </summary>
     private void InitialiseSlots()
     {
-        if (GridContainer == null)
-        {
-            Debug.LogError("[GridManager] GridContainer not assigned!");
-            return;
-        }
+        if (GridContainer == null) { Debug.LogError("[GridManager] GridContainer not assigned!"); return; }
 
-        // GetComponentsInChildren returns components in Hierarchy order.
         SlotController[] found = GridContainer.GetComponentsInChildren<SlotController>(true);
-
-        if (found.Length == 0)
-        {
-            Debug.LogError("[GridManager] No SlotController components found inside GridContainer. " +
-                           "Make sure you have built the grid in the Editor (see setup instructions).");
-            return;
-        }
+        if (found.Length == 0) { Debug.LogError("[GridManager] No SlotControllers found in GridContainer."); return; }
 
         _slots = found;
-
         for (int i = 0; i < _slots.Length; i++)
             _slots[i].Initialise(i);
 
@@ -99,13 +89,13 @@ public class GridManager : MonoBehaviour
     // Slot accessors
     // -------------------------------------------------------------------------
 
-    public SlotController          GetSlot(int index)  =>
+    public SlotController              GetSlot(int index) =>
         (_slots != null && index >= 0 && index < _slots.Length) ? _slots[index] : null;
 
-    public IEnumerable<SlotController> GetAllSlots()   => _slots;
+    public IEnumerable<SlotController> GetAllSlots()      => _slots;
 
     // -------------------------------------------------------------------------
-    // Click routing — called by SlotController.OnPointerClick
+    // Click routing
     // -------------------------------------------------------------------------
 
     public void HandleSlotClick(SlotController slot, PointerEventData.InputButton button)
@@ -113,7 +103,6 @@ public class GridManager : MonoBehaviour
         if (slot == null || button == PointerEventData.InputButton.Right) return;
 
         string activeItem = HotbarManager.Instance?.GetActiveItemID();
-
         if (string.IsNullOrEmpty(activeItem)) { TryHarvest(slot); return; }
 
         ShopItemData itemData = DataRegistry.Instance?.GetShopItem(activeItem);
@@ -121,33 +110,39 @@ public class GridManager : MonoBehaviour
 
         switch (itemData.ItemType)
         {
-            case ShopItemType.Seed:     TryPlantSeed(slot, itemData);                       break;
-            case ShopItemType.FarmPlot: TryPlaceFarmPlot(slot, activeItem);                 break;
-            case ShopItemType.Tool:     TryUseTool(slot, activeItem, itemData as ToolData); break;
+            case ShopItemType.Seed:     TryPlantSeed(slot, itemData);                        break;
+            case ShopItemType.FarmPlot: TryPlaceFarmPlot(slot, activeItem);                  break;
+            case ShopItemType.Tool:     TryUseTool(slot, activeItem, itemData as ToolData);  break;
         }
     }
 
     // -------------------------------------------------------------------------
-    // Action implementations
+    // Actions
     // -------------------------------------------------------------------------
 
     private void TryPlantSeed(SlotController slot, ShopItemData seedData)
     {
         if (slot.State != SlotState.FarmPlot_Empty) return;
+
         PlantData plantData = DataRegistry.Instance?.GetPlant(seedData.LinkedPlantID);
-        if (plantData == null) { Debug.LogWarning($"[GridManager] No PlantData for '{seedData.LinkedPlantID}'."); return; }
+        if (plantData == null)
+        { Debug.LogWarning($"[GridManager] No PlantData for '{seedData.LinkedPlantID}'."); return; }
+
         if (!PlayerInventory.Instance.HasItem(seedData.ItemID)) return;
 
         slot.PlantSeed(plantData);
         PlayerInventory.Instance.RemoveItem(seedData.ItemID);
+
         if (!PlayerInventory.Instance.HasItem(seedData.ItemID))
             HotbarManager.Instance?.ClearSlotIfEmpty(seedData.ItemID);
+
+        // Notify all subscribers that a new plant exists in this slot.
+        OnPlantPlanted?.Invoke(slot);
     }
 
     private void TryPlaceFarmPlot(SlotController slot, string itemID)
     {
-        if (slot.State != SlotState.Empty) return;
-        if (!PlayerInventory.Instance.HasItem(itemID)) return;
+        if (slot.State != SlotState.Empty || !PlayerInventory.Instance.HasItem(itemID)) return;
         slot.PlaceFarmPlot();
         PlayerInventory.Instance.RemoveItem(itemID);
         if (!PlayerInventory.Instance.HasItem(itemID))
@@ -168,7 +163,9 @@ public class GridManager : MonoBehaviour
     private void TryUseShovel(SlotController slot)
     {
         if (slot.State == SlotState.Empty) return;
+        bool hadPlant = slot.OccupyingPlant != null;
         slot.RemoveFarmPlot();
+        if (hadPlant) OnPlantRemoved?.Invoke(slot);
     }
 
     private void TryUseWateringCan(SlotController slot, string itemID, ToolData toolData)
@@ -197,8 +194,10 @@ public class GridManager : MonoBehaviour
     private void TryHarvest(SlotController slot)
     {
         if (slot.State != SlotState.FarmPlot_Ready) return;
-        Debug.Log($"[GridManager] Harvest stub — slot {slot.SlotIndex}. Full harvest in Phase 2.");
+        // Phase 2: full harvest with CropData creation and sell value calculation.
+        Debug.Log($"[GridManager] Harvest stub — slot {slot.SlotIndex}. Full implementation in Phase 2.");
         slot.ClearPlant();
+        OnPlantRemoved?.Invoke(slot);
         AudioManager.Instance?.PlaySFX("harvest");
     }
 }
