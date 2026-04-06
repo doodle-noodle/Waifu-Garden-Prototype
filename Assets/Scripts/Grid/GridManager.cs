@@ -1,9 +1,8 @@
 // =============================================================================
 // GridManager.cs  |  Scripts/Grid
-// WaifuGarden — Pre-Phase 2 Fixes
-// Added: OnPlantPlanted event fired whenever a seed is successfully planted.
-// ModifierSystem (Phase 4) and EvolutionSystem (Phase 6) subscribe to this
-// so they are notified of new PlantInstances without polling.
+// WaifuGarden — Phase 2
+// Updated: TryHarvest now creates CropData with proper sell value calculation.
+// Sell value = BaseHarvestValue × each modifier multiplier × character bonus (stub).
 // =============================================================================
 
 using System;
@@ -16,34 +15,17 @@ public class GridManager : MonoBehaviour
     public static GridManager Instance { get; private set; }
 
     [Header("Grid Container")]
-    [Tooltip("RectTransform containing all pre-built SlotController children.")]
     public RectTransform GridContainer;
 
     [Header("Starting Farm Plots")]
     public List<int> StartingFarmPlotIndices = new List<int> { 5, 6, 9, 10 };
 
     // -------------------------------------------------------------------------
-    // Events
-    // -------------------------------------------------------------------------
-
-    /// <summary>
-    /// Fired whenever a seed is successfully planted in a slot.
-    /// Passes the SlotController that now contains the new PlantInstance.
-    /// Subscribers: ModifierSystem (Phase 4), EvolutionSystem (Phase 6),
-    ///              PlantLifecycleSystem (Phase 2).
-    /// </summary>
     public event Action<SlotController> OnPlantPlanted;
-
-    /// <summary>
-    /// Fired whenever a plant is removed from a slot (harvest, shovel, evolution).
-    /// Passes the SlotController that was cleared.
-    /// </summary>
     public event Action<SlotController> OnPlantRemoved;
-
     // -------------------------------------------------------------------------
+
     private SlotController[] _slots;
-
-    // -------------------------------------------------------------------------
 
     private void Awake()
     {
@@ -62,14 +44,10 @@ public class GridManager : MonoBehaviour
     private void InitialiseSlots()
     {
         if (GridContainer == null) { Debug.LogError("[GridManager] GridContainer not assigned!"); return; }
-
         SlotController[] found = GridContainer.GetComponentsInChildren<SlotController>(true);
-        if (found.Length == 0) { Debug.LogError("[GridManager] No SlotControllers found in GridContainer."); return; }
-
+        if (found.Length == 0)    { Debug.LogError("[GridManager] No SlotControllers found."); return; }
         _slots = found;
-        for (int i = 0; i < _slots.Length; i++)
-            _slots[i].Initialise(i);
-
+        for (int i = 0; i < _slots.Length; i++) _slots[i].Initialise(i);
         Debug.Log($"[GridManager] Initialised {_slots.Length} pre-built slots.");
     }
 
@@ -78,20 +56,18 @@ public class GridManager : MonoBehaviour
         if (_slots == null) return;
         foreach (int idx in StartingFarmPlotIndices)
         {
-            if (idx < 0 || idx >= _slots.Length)
-            { Debug.LogWarning($"[GridManager] Farm plot index {idx} out of range."); continue; }
+            if (idx < 0 || idx >= _slots.Length) { Debug.LogWarning($"[GridManager] Farm plot index {idx} out of range."); continue; }
             _slots[idx].PlaceFarmPlot();
         }
         Debug.Log($"[GridManager] Placed {StartingFarmPlotIndices.Count} starting farm plots.");
     }
 
     // -------------------------------------------------------------------------
-    // Slot accessors
+    // Accessors
     // -------------------------------------------------------------------------
 
     public SlotController              GetSlot(int index) =>
         (_slots != null && index >= 0 && index < _slots.Length) ? _slots[index] : null;
-
     public IEnumerable<SlotController> GetAllSlots()      => _slots;
 
     // -------------------------------------------------------------------------
@@ -123,20 +99,15 @@ public class GridManager : MonoBehaviour
     private void TryPlantSeed(SlotController slot, ShopItemData seedData)
     {
         if (slot.State != SlotState.FarmPlot_Empty) return;
-
         PlantData plantData = DataRegistry.Instance?.GetPlant(seedData.LinkedPlantID);
-        if (plantData == null)
-        { Debug.LogWarning($"[GridManager] No PlantData for '{seedData.LinkedPlantID}'."); return; }
-
+        if (plantData == null) { Debug.LogWarning($"[GridManager] No PlantData for '{seedData.LinkedPlantID}'."); return; }
         if (!PlayerInventory.Instance.HasItem(seedData.ItemID)) return;
 
         slot.PlantSeed(plantData);
         PlayerInventory.Instance.RemoveItem(seedData.ItemID);
-
         if (!PlayerInventory.Instance.HasItem(seedData.ItemID))
             HotbarManager.Instance?.ClearSlotIfEmpty(seedData.ItemID);
 
-        // Notify all subscribers that a new plant exists in this slot.
         OnPlantPlanted?.Invoke(slot);
     }
 
@@ -191,13 +162,69 @@ public class GridManager : MonoBehaviour
             HotbarManager.Instance?.ClearSlotIfEmpty(itemID);
     }
 
+    /// <summary>
+    /// Harvests a mature (non-glowing) plant. Calculates final sell value,
+    /// creates CropData, adds to PlayerInventory.
+    /// </summary>
     private void TryHarvest(SlotController slot)
     {
         if (slot.State != SlotState.FarmPlot_Ready) return;
-        // Phase 2: full harvest with CropData creation and sell value calculation.
-        Debug.Log($"[GridManager] Harvest stub — slot {slot.SlotIndex}. Full implementation in Phase 2.");
+
+        PlantInstance plant = slot.OccupyingPlant;
+        if (plant == null) return;
+
+        // -----------------------------------------------------------------------
+        // Sell value calculation (GDD Section 5.6):
+        //   FinalValue = BaseHarvestValue
+        //              × each modifier's SellValueMultiplier (sequential)
+        //              × SellValue character bonus (Phase 7 — stub = 1.0)
+        // -----------------------------------------------------------------------
+        float value = plant.Data != null ? plant.Data.BaseHarvestValue : 0f;
+
+        foreach (string modID in plant.ActiveModifierIDs)
+        {
+            ModifierData mod = DataRegistry.Instance?.GetModifier(modID);
+            if (mod != null) value *= mod.SellValueMultiplier;
+        }
+
+        // Phase 7: value *= BonusManager.Instance.GetSellValueMultiplier();
+        float characterBonus = 1.0f; // placeholder until Phase 7
+        value *= characterBonus;
+
+        // Create crop record
+        string plantName = plant.Data != null ? plant.Data.PlantName : plant.PlantID;
+        CropData crop = new CropData(plant.PlantID, plantName, value,
+                                     new System.Collections.Generic.List<string>(plant.ActiveModifierIDs));
+
+        // Harvest animation then clear
+        AnimationHelper.PlayHarvestPop(plant.PlantImage, () =>
+        {
+            slot.ClearPlant();
+            OnPlantRemoved?.Invoke(slot);
+        });
+
+        // Discover plant and add crop to inventory
+        PlayerCollection.Instance?.DiscoverPlant(plant.PlantID);
+        PlayerInventory.Instance?.AddCrop(crop);
+        AudioManager.Instance?.PlaySFX("harvest");
+
+        Debug.Log($"[GridManager] Harvested {plantName} for ¥{value:F0}.");
+    }
+
+    // -------------------------------------------------------------------------
+    // Called by EvolutionConfirmDialogue (Phase 6 wires this fully)
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Player confirmed evolution. Phase 6 will implement the full evolution sequence.
+    /// For now, just clears the glowing plant and fires OnPlantRemoved.
+    /// </summary>
+    public void ConfirmEvolution(SlotController slot)
+    {
+        // Phase 6: EvolutionSystem.Instance.ExecuteEvolution(slot);
+        Debug.Log($"[GridManager] Evolution confirmed for slot {slot.SlotIndex} — stub until Phase 6.");
+        AnimationHelper.StopGlowPulse(slot.PlantDisplay);
         slot.ClearPlant();
         OnPlantRemoved?.Invoke(slot);
-        AudioManager.Instance?.PlaySFX("harvest");
     }
 }

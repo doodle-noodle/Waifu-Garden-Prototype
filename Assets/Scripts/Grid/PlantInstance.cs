@@ -1,13 +1,9 @@
 // =============================================================================
 // PlantInstance.cs  |  Scripts/Grid
-// WaifuGarden — Phase 1
-// Tracks all runtime state for one planted crop on a grid slot.
-// Attached as a component to the SlotPrefab. Disabled when the slot has no plant.
-//
-// Phase 1:  Identity + Seed stage sprite display.
-// Phase 2:  Growth timer, stage transitions, hover tooltip.
-// Phase 4:  ActiveModifierIDs populated by ModifierSystem.
-// Phase 6:  EvolutionPending flag set by EvolutionSystem.
+// WaifuGarden — Phase 2
+// PlantInstance is a PURE DATA CONTAINER. It holds all runtime state for one
+// planted crop but contains zero logic. PlantLifecycleSystem drives all growth.
+// Updated: StageTimer, GetRemainingTime(), GetStatusText() added.
 // =============================================================================
 
 using System.Collections.Generic;
@@ -17,69 +13,57 @@ using UnityEngine.UI;
 public class PlantInstance : MonoBehaviour
 {
     // -------------------------------------------------------------------------
-    // State — populated by SlotController.PlantSeed()
+    // Identity & Stage
     // -------------------------------------------------------------------------
-
-    public string    PlantID             { get; private set; }
-    public PlantData Data                { get; private set; }
-    public GrowthStage Stage             { get; private set; } = GrowthStage.Seed;
-    public bool      EvolutionPending    { get; set; }         = false;
-    public bool      IsFertilized        { get; private set; } = false;
-    public bool      IsWatered           { get; private set; } = false;
+    public string      PlantID            { get; private set; }
+    public PlantData   Data               { get; private set; }
+    public GrowthStage Stage              { get; private set; } = GrowthStage.Seed;
+    public bool        EvolutionPending   { get; set; }        = false;
+    public bool        IsFertilized       { get; private set; } = false;
+    public bool        IsWatered          { get; private set; } = false;
 
     /// <summary>
-    /// Combined growth speed multiplier.
-    /// 1.0 base → WateringCan sets to 2.0 → BonusManager adds GrowthSpeed bonuses on top.
+    /// Effective growth speed multiplier.
+    /// 1.0 base. WateringCan sets to 2.0. BonusManager (Phase 7) stacks on top.
     /// </summary>
     public float GrowthSpeedMultiplier { get; set; } = 1.0f;
 
-    /// <summary>All modifier IDs currently active on this plant.</summary>
+    /// <summary>Counts up each frame via PlantLifecycleSystem. Reset to 0 on stage change.</summary>
+    public float StageTimer { get; set; } = 0f;
+
     public List<string> ActiveModifierIDs { get; private set; } = new List<string>();
 
-    // -------------------------------------------------------------------------
-    // Visual reference — set by SlotController during Initialise()
-    // -------------------------------------------------------------------------
-
-    [HideInInspector] public Image PlantImage; // The Image component that shows plant sprites
+    // Visual reference — set by SlotController.PlantSeed()
+    [HideInInspector] public Image PlantImage;
 
     // -------------------------------------------------------------------------
-    // Phase 2 growth timer fields (declared now so Phase 2 can simply uncomment)
+    // Initialisation
     // -------------------------------------------------------------------------
 
-    [HideInInspector] public float StageTimer = 0f;
-
-    // -------------------------------------------------------------------------
-    // Public API
-    // -------------------------------------------------------------------------
-
-    /// <summary>
-    /// Called by SlotController when a seed is planted.
-    /// Initialises identity, sets Seed stage, displays seed sprite.
-    /// </summary>
     public void Initialise(PlantData data, Image displayImage)
     {
-        Data               = data;
-        PlantID            = data.PlantID;
-        Stage              = GrowthStage.Seed;
-        StageTimer         = 0f;
-        EvolutionPending   = false;
-        IsFertilized       = false;
-        IsWatered          = false;
+        Data                  = data;
+        PlantID               = data.PlantID;
+        Stage                 = GrowthStage.Seed;
+        StageTimer            = 0f;
+        EvolutionPending      = false;
+        IsFertilized          = false;
+        IsWatered             = false;
         GrowthSpeedMultiplier = 1.0f;
         ActiveModifierIDs.Clear();
 
         PlantImage = displayImage;
         UpdateSprite();
-
-        gameObject.SetActive(true);
         Debug.Log($"[PlantInstance] Planted: {PlantID}");
     }
 
-    /// <summary>Sets the plant image sprite to match the current growth stage.</summary>
+    // -------------------------------------------------------------------------
+    // Sprite
+    // -------------------------------------------------------------------------
+
     public void UpdateSprite()
     {
         if (PlantImage == null || Data == null) return;
-
         Sprite sprite = Stage switch
         {
             GrowthStage.Seed   => Data.SeedSprite,
@@ -87,36 +71,79 @@ public class PlantInstance : MonoBehaviour
             GrowthStage.Mature => Data.MatureSprite,
             _                  => Data.SeedSprite
         };
-
         PlantImage.sprite  = sprite;
         PlantImage.enabled = sprite != null;
+    }
+
+    // -------------------------------------------------------------------------
+    // Stage advancement — called by PlantLifecycleSystem only
+    // -------------------------------------------------------------------------
+
+    public void AdvanceStage()
+    {
+        if (Stage == GrowthStage.Mature) return;
+        Stage      = Stage == GrowthStage.Seed ? GrowthStage.Sprout : GrowthStage.Mature;
+        StageTimer = 0f;
+        UpdateSprite();
+        Debug.Log($"[PlantInstance] {PlantID} → {Stage}");
+        OnStageChanged?.Invoke(Stage);
+    }
+
+    // -------------------------------------------------------------------------
+    // Growth time helpers — used by SlotLabelUI and PlantLifecycleSystem
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Threshold for the current stage (seconds at base speed × current multiplier).
+    /// </summary>
+    public float GetCurrentStageThreshold()
+    {
+        if (Data == null) return float.MaxValue;
+        float baseTime = Stage == GrowthStage.Seed
+            ? Data.SeedToSproutTime
+            : Data.SproutToMatureTime;
+        return baseTime / Mathf.Max(GrowthSpeedMultiplier, 0.01f);
+    }
+
+    /// <summary>Remaining seconds until the current stage completes. Always >= 0.</summary>
+    public float GetRemainingTime()
+    {
+        if (Stage == GrowthStage.Mature) return 0f;
+        return Mathf.Max(0f, GetCurrentStageThreshold() - StageTimer);
+    }
+
+    /// <summary>
+    /// Short status string shown in the slot label.
+    ///   Growing:  "Carrot — 3.2s"
+    ///   Ready:    "Carrot — Ready for harvest!"
+    ///   Glowing:  "Carrot — Wants to evolve!"
+    /// </summary>
+    public string GetStatusText()
+    {
+        string name = Data != null ? Data.PlantName : PlantID;
+        if (Stage != GrowthStage.Mature)
+            return $"{name} — {GetRemainingTime():F1}s";
+        return EvolutionPending
+            ? $"{name} — Wants to evolve!"
+            : $"{name} — Ready for harvest!";
     }
 
     // -------------------------------------------------------------------------
     // Modifier API — called by ModifierSystem (Phase 4) and tools (Phase 5)
     // -------------------------------------------------------------------------
 
-    /// <summary>
-    /// Adds a modifier to this plant if not already present.
-    /// Returns true if the modifier was newly added.
-    /// </summary>
     public bool AddModifier(string modifierID)
     {
-        if (string.IsNullOrEmpty(modifierID))         return false;
-        if (ActiveModifierIDs.Contains(modifierID))   return false;
-
+        if (string.IsNullOrEmpty(modifierID))       return false;
+        if (ActiveModifierIDs.Contains(modifierID)) return false;
         ActiveModifierIDs.Add(modifierID);
-
-        // Cache convenience flags
         if (modifierID == "Fertilized") IsFertilized = true;
         if (modifierID == "Wet")        IsWatered    = true;
-
         Debug.Log($"[PlantInstance] {PlantID} gained modifier: {modifierID}");
         OnModifiersChanged?.Invoke();
         return true;
     }
 
-    /// <summary>Removes a modifier by ID. Used by combination rules (Phase 4).</summary>
     public bool RemoveModifier(string modifierID)
     {
         bool removed = ActiveModifierIDs.Remove(modifierID);
@@ -132,28 +159,8 @@ public class PlantInstance : MonoBehaviour
     public bool HasModifier(string modifierID) => ActiveModifierIDs.Contains(modifierID);
 
     // -------------------------------------------------------------------------
-    // Phase 2 — Growth stage transition (implemented in Phase 2)
+    // Events
     // -------------------------------------------------------------------------
-
-    /// <summary>
-    /// Advances to the next growth stage and updates the sprite.
-    /// Called by PlantLifecycleSystem (Phase 2).
-    /// </summary>
-    public void AdvanceStage()
-    {
-        if (Stage == GrowthStage.Mature) return;
-        Stage = Stage == GrowthStage.Seed ? GrowthStage.Sprout : GrowthStage.Mature;
-        StageTimer = 0f;
-        UpdateSprite();
-        // Phase 2: AnimationHelper.PlayGrowthPop(PlantImage) — wired there
-        Debug.Log($"[PlantInstance] {PlantID} → {Stage}");
-        OnStageChanged?.Invoke(Stage);
-    }
-
-    // -------------------------------------------------------------------------
-    // Events — subscribed to by SlotController and UI systems
-    // -------------------------------------------------------------------------
-
-    public event System.Action             OnModifiersChanged;
+    public event System.Action              OnModifiersChanged;
     public event System.Action<GrowthStage> OnStageChanged;
 }
