@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 22d08455316b644478623d4115eb2c40, type: 3}
+  m_Name: ToolData_Fertilizer
+  m_EditorClassIdentifier: Assembly-CSharp::ToolData
+  ItemID: Fertilizer
+  ItemName: Fertilizer
+  ItemIcon: {fileID: 21300000, guid: f3ff59b83dc459143bb71d8125af7e21, type: 3}
+  Description: Increases sell value of plant its used on
+  BuyCost: 20
+  ItemType: 1
+  MaxPurchaseCount: -1
+  UnlockAtTotalCurrency: 50
+  LinkedPlantID: 
+  CatalogueHint: 
+  Type: 2
+  UsesPerPurchase: 1
+  ModifierApplied: Fertilized
+  GrowthSpeedMultiplier: 1

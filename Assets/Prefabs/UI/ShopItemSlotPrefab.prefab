@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 4788060035515873402}
   - component: {fileID: 5398509851808007653}
   m_Layer: 5
-  m_Name: SellValueLabel
+  m_Name: CostLabel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -149,7 +149,7 @@ GameObject:
   - component: {fileID: 6287481240743676676}
   - component: {fileID: 8700825712456830980}
   m_Layer: 5
-  m_Name: CropNameLabel
+  m_Name: ItemNameLabel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -286,7 +286,7 @@ GameObject:
   - component: {fileID: 919375054638763768}
   - component: {fileID: 7737307936777353002}
   m_Layer: 5
-  m_Name: ModifierListLabel
+  m_Name: DescriptionLabel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -308,8 +308,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 368, y: -69.1}
-  m_SizeDelta: {x: 500, y: 30}
+  m_AnchoredPosition: {x: 419.1, y: -80.5}
+  m_SizeDelta: {x: 600, y: 50}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &919375054638763768
 CanvasRenderer:
@@ -370,8 +370,8 @@ MonoBehaviour:
   m_fontSizeBase: 20
   m_fontWeight: 400
   m_enableAutoSizing: 0
-  m_fontSizeMin: 18
-  m_fontSizeMax: 72
+  m_fontSizeMin: 20
+  m_fontSizeMax: 20
   m_fontStyle: 0
   m_HorizontalAlignment: 1
   m_VerticalAlignment: 256
@@ -385,7 +385,7 @@ MonoBehaviour:
   m_charWidthMaxAdj: 0
   m_TextWrappingMode: 1
   m_wordWrappingRatios: 0.4
-  m_overflowMode: 0
+  m_overflowMode: 1
   m_linkedTextComponent: {fileID: 0}
   parentLinkedComponent: {fileID: 0}
   m_enableKerning: 0
@@ -424,7 +424,7 @@ GameObject:
   - component: {fileID: 1838430412057888307}
   - component: {fileID: 6153699076509506921}
   m_Layer: 5
-  m_Name: SellButton
+  m_Name: BuyButton
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -597,7 +597,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Sell
+  m_text: Buy
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -679,10 +679,10 @@ GameObject:
   m_Component:
   - component: {fileID: 5584348244268069986}
   - component: {fileID: 6881753970016243250}
-  - component: {fileID: 4086049473292563675}
   - component: {fileID: 1945206365454752336}
+  - component: {fileID: 286160908835411661}
   m_Layer: 5
-  m_Name: SellSlotPrefab
+  m_Name: ShopItemSlotPrefab
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -721,22 +721,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 6463768459429345621}
   m_CullTransparentMesh: 1
---- !u!114 &4086049473292563675
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6463768459429345621}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b790f78bb7740144da9e83014b8cbbbd, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SellSlotUI
-  CropNameLabel: {fileID: 8700825712456830980}
-  ModifierListLabel: {fileID: 7737307936777353002}
-  SellValueLabel: {fileID: 5398509851808007653}
-  SellButton: {fileID: 6153699076509506921}
 --- !u!114 &1945206365454752336
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -757,6 +741,25 @@ MonoBehaviour:
   m_FlexibleWidth: -1
   m_FlexibleHeight: -1
   m_LayoutPriority: 1
+--- !u!114 &286160908835411661
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6463768459429345621}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 172cf0556cfbdfd49864389a18f4aada, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ShopItemSlotUI
+  ItemIcon: {fileID: 5438868698774231339}
+  ItemNameLabel: {fileID: 8700825712456830980}
+  DescriptionLabel: {fileID: 7737307936777353002}
+  CostLabel: {fileID: 5398509851808007653}
+  BuyButton: {fileID: 6153699076509506921}
+  BuyButtonLabel: {fileID: 1408841404816683606}
+  OwnedBadge: {fileID: 1118559655238962578}
 --- !u!1 &6564403514763322680
 GameObject:
   m_ObjectHideFlags: 0
