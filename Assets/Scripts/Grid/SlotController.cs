@@ -1,8 +1,13 @@
 // =============================================================================
 // SlotController.cs  |  Scripts/Grid
-// WaifuGarden — Phase 2
-// Updated: OnPointerEnter/Exit now show/hide SlotLabelUI.
-// Glowing slot clicks open EvolutionConfirmDialogue instead of harvesting.
+// WaifuGarden — Phase 2 Fix 2
+// Fix A: OnPointerEnter checks State — only shows slot label when a plant
+//        is actually growing or mature, never on Empty or FarmPlot_Empty slots.
+// Fix B: ClearPlant() calls SlotLabelUI.Instance?.Hide() so the label
+//        disappears immediately when a plant is harvested or removed.
+// Fix C: PlantInstance.Initialise() is called with a flag indicating it has
+//        been seeded — OccupyingPlant.Data being non-null is the "is planted"
+//        check used in OnPointerEnter.
 // =============================================================================
 
 using UnityEngine;
@@ -11,9 +16,7 @@ using UnityEngine.EventSystems;
 
 public class SlotController : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, IPointerExitHandler
 {
-    // -------------------------------------------------------------------------
     [Header("Visual Layers")]
-    // -------------------------------------------------------------------------
     public Image BackgroundImage;
     public Image FarmPlotOverlay;
     public Image PlantDisplay;
@@ -85,11 +88,10 @@ public class SlotController : MonoBehaviour, IPointerClickHandler, IPointerEnter
 
     public void RemoveFarmPlot()
     {
+        AnimationHelper.StopGlowPulse(PlantDisplay);
         if (OccupyingPlant != null)
-        {
-            AnimationHelper.StopGlowPulse(PlantDisplay);
             OccupyingPlant.OnModifiersChanged -= RefreshFarmPlotSprite;
-        }
+        SlotLabelUI.Instance?.Hide();
         SetState(SlotState.Empty);
         AudioManager.Instance?.PlaySFX("shovel");
     }
@@ -118,11 +120,13 @@ public class SlotController : MonoBehaviour, IPointerClickHandler, IPointerEnter
 
     public void ClearPlant()
     {
+        AnimationHelper.StopGlowPulse(PlantDisplay);
         if (OccupyingPlant != null)
-        {
-            AnimationHelper.StopGlowPulse(PlantDisplay);
             OccupyingPlant.OnModifiersChanged -= RefreshFarmPlotSprite;
-        }
+
+        // Hide the slot label immediately — do not wait for OnPointerExit.
+        SlotLabelUI.Instance?.Hide();
+
         SetState(SlotState.FarmPlot_Empty);
     }
 
@@ -134,7 +138,7 @@ public class SlotController : MonoBehaviour, IPointerClickHandler, IPointerEnter
     {
         if (eventData.button == PointerEventData.InputButton.Right) return;
 
-        // Glowing slot: open evolution confirmation dialogue instead of harvesting.
+        // Glowing slot + no active hotbar item = open evolution confirmation.
         if (State == SlotState.FarmPlot_Glowing && OccupyingPlant != null
             && HotbarManager.Instance?.GetActiveItemID() == null)
         {
@@ -147,7 +151,15 @@ public class SlotController : MonoBehaviour, IPointerClickHandler, IPointerEnter
 
     public void OnPointerEnter(PointerEventData eventData)
     {
-        if (OccupyingPlant == null) return;
+        // Only show the label when a plant is actively growing or mature.
+        // FarmPlot_Empty and Empty have no plant data to display.
+        bool hasActivePlant = State == SlotState.FarmPlot_Growing
+                           || State == SlotState.FarmPlot_Ready
+                           || State == SlotState.FarmPlot_Glowing;
+
+        if (!hasActivePlant) return;
+        if (OccupyingPlant == null || OccupyingPlant.Data == null) return;
+
         SlotLabelUI.Instance?.Show(this);
     }
 

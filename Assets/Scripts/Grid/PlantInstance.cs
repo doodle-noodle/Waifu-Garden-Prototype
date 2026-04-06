@@ -1,9 +1,11 @@
 // =============================================================================
 // PlantInstance.cs  |  Scripts/Grid
-// WaifuGarden — Phase 2
-// PlantInstance is a PURE DATA CONTAINER. It holds all runtime state for one
-// planted crop but contains zero logic. PlantLifecycleSystem drives all growth.
-// Updated: StageTimer, GetRemainingTime(), GetStatusText() added.
+// WaifuGarden — Phase 2 Fix 2
+// Fix A: GetRemainingTime() now returns TOTAL remaining time until Mature,
+//        not just time until the next stage.
+//        Seed stage:   (SeedThreshold - StageTimer) + full SproutThreshold
+//        Sprout stage: (SproutThreshold - StageTimer)
+// Fix B: GetStatusText() uses the corrected time.
 // =============================================================================
 
 using System.Collections.Generic;
@@ -15,25 +17,19 @@ public class PlantInstance : MonoBehaviour
     // -------------------------------------------------------------------------
     // Identity & Stage
     // -------------------------------------------------------------------------
-    public string      PlantID            { get; private set; }
-    public PlantData   Data               { get; private set; }
-    public GrowthStage Stage              { get; private set; } = GrowthStage.Seed;
-    public bool        EvolutionPending   { get; set; }        = false;
-    public bool        IsFertilized       { get; private set; } = false;
-    public bool        IsWatered          { get; private set; } = false;
+    public string      PlantID          { get; private set; }
+    public PlantData   Data             { get; private set; }
+    public GrowthStage Stage            { get; private set; } = GrowthStage.Seed;
+    public bool        EvolutionPending { get; set; }         = false;
+    public bool        IsFertilized     { get; private set; } = false;
+    public bool        IsWatered        { get; private set; } = false;
+    public float       GrowthSpeedMultiplier { get; set; }    = 1.0f;
 
-    /// <summary>
-    /// Effective growth speed multiplier.
-    /// 1.0 base. WateringCan sets to 2.0. BonusManager (Phase 7) stacks on top.
-    /// </summary>
-    public float GrowthSpeedMultiplier { get; set; } = 1.0f;
-
-    /// <summary>Counts up each frame via PlantLifecycleSystem. Reset to 0 on stage change.</summary>
+    /// <summary>Counts up via PlantLifecycleSystem. Reset to 0 on stage change.</summary>
     public float StageTimer { get; set; } = 0f;
 
     public List<string> ActiveModifierIDs { get; private set; } = new List<string>();
 
-    // Visual reference — set by SlotController.PlantSeed()
     [HideInInspector] public Image PlantImage;
 
     // -------------------------------------------------------------------------
@@ -51,7 +47,6 @@ public class PlantInstance : MonoBehaviour
         IsWatered             = false;
         GrowthSpeedMultiplier = 1.0f;
         ActiveModifierIDs.Clear();
-
         PlantImage = displayImage;
         UpdateSprite();
         Debug.Log($"[PlantInstance] Planted: {PlantID}");
@@ -90,31 +85,53 @@ public class PlantInstance : MonoBehaviour
     }
 
     // -------------------------------------------------------------------------
-    // Growth time helpers — used by SlotLabelUI and PlantLifecycleSystem
+    // Growth time helpers
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Threshold for the current stage (seconds at base speed × current multiplier).
+    /// Duration of the Seed stage at current speed (SeedToSproutTime / multiplier).
     /// </summary>
-    public float GetCurrentStageThreshold()
-    {
-        if (Data == null) return float.MaxValue;
-        float baseTime = Stage == GrowthStage.Seed
-            ? Data.SeedToSproutTime
-            : Data.SproutToMatureTime;
-        return baseTime / Mathf.Max(GrowthSpeedMultiplier, 0.01f);
-    }
+    public float GetSeedThreshold() =>
+        Data == null ? 0f : Data.SeedToSproutTime / Mathf.Max(GrowthSpeedMultiplier, 0.01f);
 
-    /// <summary>Remaining seconds until the current stage completes. Always >= 0.</summary>
-    public float GetRemainingTime()
+    /// <summary>
+    /// Duration of the Sprout stage at current speed (SproutToMatureTime / multiplier).
+    /// </summary>
+    public float GetSproutThreshold() =>
+        Data == null ? 0f : Data.SproutToMatureTime / Mathf.Max(GrowthSpeedMultiplier, 0.01f);
+
+    /// <summary>
+    /// Threshold for the current stage only — used by PlantLifecycleSystem to
+    /// know when to trigger a transition.
+    /// </summary>
+    public float GetCurrentStageThreshold() =>
+        Stage == GrowthStage.Seed ? GetSeedThreshold() : GetSproutThreshold();
+
+    /// <summary>
+    /// TOTAL remaining seconds until Mature, regardless of current stage.
+    ///   Seed stage:   (SeedThreshold - StageTimer) + full SproutThreshold
+    ///   Sprout stage: (SproutThreshold - StageTimer)
+    ///   Mature:       0
+    /// This is what is shown in the slot label.
+    /// </summary>
+    public float GetTotalRemainingTime()
     {
         if (Stage == GrowthStage.Mature) return 0f;
-        return Mathf.Max(0f, GetCurrentStageThreshold() - StageTimer);
+
+        if (Stage == GrowthStage.Seed)
+        {
+            float remainingInSeed   = Mathf.Max(0f, GetSeedThreshold()   - StageTimer);
+            float fullSproutTime    = GetSproutThreshold();
+            return remainingInSeed + fullSproutTime;
+        }
+
+        // Sprout stage
+        return Mathf.Max(0f, GetSproutThreshold() - StageTimer);
     }
 
     /// <summary>
-    /// Short status string shown in the slot label.
-    ///   Growing:  "Carrot — 3.2s"
+    /// Status string shown in the slot label.
+    ///   Growing:  "Carrot — 5.0s"   (total time to Mature)
     ///   Ready:    "Carrot — Ready for harvest!"
     ///   Glowing:  "Carrot — Wants to evolve!"
     /// </summary>
@@ -122,14 +139,14 @@ public class PlantInstance : MonoBehaviour
     {
         string name = Data != null ? Data.PlantName : PlantID;
         if (Stage != GrowthStage.Mature)
-            return $"{name} — {GetRemainingTime():F1}s";
+            return $"{name} — {GetTotalRemainingTime():F1}s";
         return EvolutionPending
             ? $"{name} — Wants to evolve!"
             : $"{name} — Ready for harvest!";
     }
 
     // -------------------------------------------------------------------------
-    // Modifier API — called by ModifierSystem (Phase 4) and tools (Phase 5)
+    // Modifier API
     // -------------------------------------------------------------------------
 
     public bool AddModifier(string modifierID)
